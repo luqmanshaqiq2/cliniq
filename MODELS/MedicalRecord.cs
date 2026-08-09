@@ -1,33 +1,39 @@
 using System;
 using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Threading.Tasks;
+using Cliniq.MODELS.ENUM;
 
 namespace Cliniq.MODELS
 {
     public class MedicalRecord
     {
+          public int Id { get; set; }
 
-        //VALIDATED
-        [Key]
-        public string Id { get; set; } = Guid.NewGuid().ToString();
-        public string PatientId { get; set; } = string.Empty;
-        public Patient Patient { get; set; } = null!;
-        public string DoctorId { get; set; } = string.Empty;
-        public Doctor Doctor { get; set; } = null!;
-        public string AppointmentId { get; set; } = string.Empty;
-        public Appointment Appointment { get; set; } = null!;
-        public DateTime VisitDate { get; set; } = DateTime.Now;
+    public int PatientId { get; set; }
 
-        public string Diagnosis { get; set; } = string.Empty;
-        public string Symptoms { get; set; } = string.Empty;
-        public string Treatment { get; set; } = string.Empty;
-        public string Notes { get; set; } = string.Empty;
+    public Patient Patient { get; set; } = null!;
 
-        public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public int AppointmentId { get; set; }
 
-        // One-to-Many
-        public ICollection<Prescription>? Prescriptions { get; set; }
+    public Appointment Appointment { get; set; } = null!;
+
+    public string Diagnosis { get; set; } = string.Empty;
+
+    public string? Prescription { get; set; }
+
+    public TreatmentType TreatmentType { get; set; }
+
+    public string? SurgeryDetails { get; set; }
+
+    public int? ApprovedByDoctorId { get; set; }
+
+    public Doctor? ApprovedByDoctor { get; set; }
+
+    public DateTime? ApprovedAtUtc { get; set; }
+
+    public string? Notes { get; set; }
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 }

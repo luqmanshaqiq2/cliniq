@@ -2,24 +2,24 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Cliniq.MODELS.ENUMs;
+using Cliniq.MODELS.ENUM;
 
 namespace Cliniq.MODELS
 {
     public class Invoice
     {
-        public string Id { get; set; } = Guid.NewGuid().ToString();
-        public DateTime IssuedDate { get; set; } = DateTime.UtcNow;
-        public DateTime DueDate { get; set; } = DateTime.UtcNow.AddDays(30);
-        public decimal TotalAmount { get; set; } = 0;
-        public InvoiceStatus Status { get; set; } = InvoiceStatus.Pending;
+         public int Id { get; set; }
 
-        public string PatientId { get; set; } = string.Empty;
-        public Patient Patient { get; set; } = null!;
+    public int AppointmentId { get; set; }
 
-        public string AppointmentId { get; set; } = string.Empty;
-        public Appointment? Appointment { get; set; }
+    public Appointment Appointment { get; set; } = null!;
 
-        public ICollection<Payment> Payments { get; set; } = new List<Payment>();
+    public decimal Amount { get; set; }
+
+    public PaymentStatus Status { get; set; } = PaymentStatus.Pending;
+
+    public DateTime IssuedAt { get; set; } = DateTime.UtcNow;
+
+    public ICollection<Payment> Payments { get; set; } = new List<Payment>();
     }
 }

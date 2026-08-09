@@ -1,40 +1,37 @@
 using System;
 using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq;
 using System.Threading.Tasks;
+using Cliniq.MODELS.ENUM;
 
 namespace Cliniq.MODELS
 {
     public class Appointment
     {
-        [Key]
-        public string Id { get; set; } = Guid.NewGuid().ToString();
+        public int Id { get; set; }
 
-        [Required]
-        public string PatientId { get; set; } = string.Empty;
+    public int PatientId { get; set; }
 
-        [ForeignKey(nameof(PatientId))]
-        public Patient Patient { get; set; } = null!;
+    public Patient Patient { get; set; } = null!;
 
-        [Required]
-        public string DoctorId { get; set; } = string.Empty;
+    public int DoctorId { get; set; }
 
-        [ForeignKey(nameof(DoctorId))]
-        public Doctor Doctor { get; set; } = null!;
+    public Doctor Doctor { get; set; } = null!;
 
-        public DateTime AppointmentDate { get; set; }
+    public int? AvailabilitySlotId { get; set; }
 
-        [StringLength(20)]
-        public string Status { get; set; } = string.Empty;
+    public AvailabilitySlot? AvailabilitySlot { get; set; }
 
-        public string Reason { get; set; } = string.Empty;
-        public string Notes { get; set; } = string.Empty;
+    public DateTime ScheduledAtUtc { get; set; }
 
-        public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public AppointmentStatus Status { get; set; } = AppointmentStatus.Scheduled;
 
-        // One-to-One
-        public MedicalRecord? MedicalRecord { get; set; }
+    public string? Notes { get; set; }
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    public MedicalRecord? MedicalRecord { get; set; }
+
+    public Invoice? Invoice { get; set; }
     }
 }

@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Cliniq.MODELS.ENUMs;
 
 namespace Cliniq.HELPER
 {
@@ -10,8 +9,7 @@ namespace Cliniq.HELPER
     {
         public string? InvoiceId { get; set; }
         public string? PatientId { get; set; }
-        public PaymentMethod? Method { get; set; }
-        public PaymentStatus? Status { get; set; }
+        public string? Method { get; set; }
         public DateTime? StartDate { get; set; }
         public DateTime? EndDate { get; set; }
 

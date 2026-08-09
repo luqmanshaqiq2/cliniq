@@ -2,105 +2,185 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.EntityFrameworkCore;
-using Cliniq.DATA;
+using Cliniq.Data;
 using Cliniq.HELPER;
 using Cliniq.MODELS;
-using Cliniq.REPOS.IREPOS;
+using Cliniq.MODELS.DTO;
+using Cliniq.MODELS.ENUM;
+using Cliniq.REPOS.INTERFACES;
+using Microsoft.EntityFrameworkCore;
 
 namespace Cliniq.REPOS
 {
     public class AppointmentRepository : IAppointmentRepository
     {
-        private readonly CliniqDbContext _context;
+         private readonly CliniqDbContext _context;
 
-        public AppointmentRepository(CliniqDbContext context)
+    public AppointmentRepository(CliniqDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<PageResult<Appointment>> GetAllAsync(AppointmentQueryObject query)
+    {
+        var appointments = _context.Appointments
+            .Include(a => a.Patient)
+            .Include(a => a.Doctor)
+            .AsQueryable();
+
+        if (query.PatientId.HasValue)
+            appointments = appointments.Where(a => a.PatientId == query.PatientId);
+
+        if (query.DoctorId.HasValue)
+            appointments = appointments.Where(a => a.DoctorId == query.DoctorId);
+
+        if (query.Status.HasValue)
+            appointments = appointments.Where(a => a.Status == query.Status);
+
+        // All comparisons happen in UTC — ScheduledAtUtc is stored as UTC (Kind=Utc).
+        if (query.FromUtc.HasValue)
+            appointments = appointments.Where(a => a.ScheduledAtUtc >= query.FromUtc);
+
+        if (query.ToUtc.HasValue)
+            appointments = appointments.Where(a => a.ScheduledAtUtc <= query.ToUtc);
+
+        appointments = appointments.OrderBy(a => a.ScheduledAtUtc);
+
+        var totalCount = await appointments.CountAsync();
+
+        var items = await appointments
+            .Skip((query.PageNumber - 1) * query.PageSize)
+            .Take(query.PageSize)
+            .ToListAsync();
+
+        return new PageResult<Appointment>
         {
-            _context = context;
-        }
+            Items = items,
+            TotalCount = totalCount,
+            PageNumber = query.PageNumber,
+            PageSize = query.PageSize
+        };
+    }
 
-        public async Task<List<Appointment>> GetAllAsync(AppointmentQueryObject query)
+    public async Task<Appointment?> GetByIdAsync(int id) =>
+        await _context.Appointments
+            .Include(a => a.Patient)
+            .Include(a => a.Doctor)
+            .FirstOrDefaultAsync(a => a.Id == id);
+
+    public async Task<Appointment> CreateAsync(Appointment appointment)
+    {
+        _context.Appointments.Add(appointment);
+        await _context.SaveChangesAsync();
+        return appointment;
+    }
+
+    public async Task<Appointment?> UpdateStatusAsync(int id, AppointmentStatus status)
+    {
+        var existing = await _context.Appointments.FirstOrDefaultAsync(a => a.Id == id);
+        if (existing is null) return null;
+
+        if (existing.Status is AppointmentStatus.Completed
+            or AppointmentStatus.Cancelled
+            or AppointmentStatus.NoShow)
+            throw new InvalidOperationException("A completed, cancelled, or missed appointment cannot be reopened.");
+
+        existing.Status = status;
+        await _context.SaveChangesAsync();
+        return existing;
+    }
+
+    public async Task<int?> GetDoctorIdForUserAsync(int userId) =>
+        await _context.Users
+            .Where(u => u.Id == userId)
+            .Select(u => u.DoctorId)
+            .FirstOrDefaultAsync();
+
+    public async Task<MedicalRecord?> GetTreatmentAsync(int appointmentId) =>
+        await _context.MedicalRecords
+            .AsNoTracking()
+            .FirstOrDefaultAsync(m => m.AppointmentId == appointmentId);
+
+    public async Task<MedicalRecord> RecordTreatmentAsync(
+        int appointmentId,
+        int doctorId,
+        int performedByUserId,
+        CreateTreatmentDto treatment)
+    {
+        var appointment = await _context.Appointments
+            .Include(a => a.MedicalRecord)
+            .FirstOrDefaultAsync(a => a.Id == appointmentId)
+            ?? throw new KeyNotFoundException("Appointment was not found.");
+
+        if (appointment.DoctorId != doctorId)
+            throw new UnauthorizedAccessException("Only the doctor assigned to this appointment can approve treatment.");
+
+        if (appointment.Status != AppointmentStatus.InProgress)
+            throw new InvalidOperationException(
+                "Treatment can be approved only after the appointment has been marked in progress.");
+
+        if (appointment.MedicalRecord is not null)
+            throw new InvalidOperationException("Treatment has already been recorded for this appointment.");
+
+        var record = new MedicalRecord
         {
-            var appointments = _context.Appointments.AsQueryable();
+            AppointmentId = appointment.Id,
+            PatientId = appointment.PatientId,
+            Diagnosis = treatment.Diagnosis.Trim(),
+            TreatmentType = treatment.TreatmentType,
+            Prescription = treatment.TreatmentType == TreatmentType.Medication
+                ? treatment.Prescription?.Trim()
+                : null,
+            SurgeryDetails = treatment.TreatmentType == TreatmentType.Surgery
+                ? treatment.SurgeryDetails?.Trim()
+                : null,
+            Notes = treatment.Notes?.Trim(),
+            ApprovedByDoctorId = doctorId,
+            ApprovedAtUtc = DateTime.UtcNow
+        };
 
-            // Apply filtering based on the query object
-           if (!string.IsNullOrEmpty(query.DoctorId))
-           {
-                appointments = appointments.Where(a => a.DoctorId == query.DoctorId);
-           }
-
-           if (!string.IsNullOrEmpty(query.PatientId))
-            {
-                appointments = appointments.Where(a => a.PatientId == query.PatientId);
-            }
-            if (!string.IsNullOrEmpty(query.Status))
-            {
-                appointments = appointments.Where(a => a.Status == query.Status);
-            }
-
-            // Apply sorting based on the query object
-            if (!string.IsNullOrEmpty(query.SortBy))
-            {
-                switch (query.SortBy.ToLower())
-                {
-                    case "datetime":
-                        appointments = query.SortDescending ? appointments.OrderByDescending(a => a.AppointmentDate) : appointments.OrderBy(a => a.AppointmentDate);
-                        break;
-                    case "status":
-                        appointments = query.SortDescending ? appointments.OrderByDescending(a => a.Status) : appointments.OrderBy(a => a.Status);
-                        break;
-                    default:
-                        break;
-                }
-            }
-
-            return await appointments.ToListAsync();
-        }
-
-        public async Task<Appointment?> GetByIdAsync(string id)
+        appointment.Status = AppointmentStatus.Completed;
+        _context.MedicalRecords.Add(record);
+        _context.AuditLogs.Add(new AuditLog
         {
-            return await _context.Appointments.FirstOrDefaultAsync(a => a.Id == id);
-        }
+            Action = "TreatmentApproved",
+            EntityName = nameof(Appointment),
+            EntityId = appointment.Id,
+            PerformedByUserId = performedByUserId,
+            Details = $"{treatment.TreatmentType} treatment approved for medical record."
+        });
 
-        public async Task<Appointment> CreateAppointmentAsync(Appointment appointmentModel)
-        {
-            await _context.Appointments.AddAsync(appointmentModel);
-            await _context.SaveChangesAsync();
-            return appointmentModel;
-        }
+        await _context.SaveChangesAsync();
+        return record;
+    }
 
-        public async Task<Appointment?> UpdateAppointmentAsync(string id, Appointment appointmentModel)
-        {
-            var existingAppointment = await _context.Appointments.FirstOrDefaultAsync(a => a.Id == id);
-            if (existingAppointment == null)
-            {
-                return null;
-            }
+    private static readonly TimeSpan DoubleBookingBuffer = TimeSpan.FromMinutes(30);
 
-            // Update the properties of the existing appointment
-            existingAppointment.AppointmentDate = appointmentModel.AppointmentDate;
-            existingAppointment.Reason = appointmentModel.Reason;
-            existingAppointment.Notes = appointmentModel.Notes;
-            existingAppointment.Status = appointmentModel.Status;
-            existingAppointment.DoctorId = appointmentModel.DoctorId;
-            existingAppointment.PatientId = appointmentModel.PatientId;
+    public async Task<bool> IsDoubleBookedAsync(int doctorId, DateTime scheduledAtUtc)
+    {
+        // Ensure Kind=Utc so EF/SqlServer comparisons stay consistent regardless
+        // of how the caller constructed the DateTime (this was an earlier bug).
+        var utc = DateTime.SpecifyKind(scheduledAtUtc, DateTimeKind.Utc);
+        var startWindow = utc - DoubleBookingBuffer;
+        var endWindow = utc + DoubleBookingBuffer;
 
+        return await _context.Appointments.AnyAsync(a =>
+            a.DoctorId == doctorId &&
+            a.Status != AppointmentStatus.Cancelled &&
+            a.Status != AppointmentStatus.NoShow &&
+            a.ScheduledAtUtc >= startWindow &&
+            a.ScheduledAtUtc <= endWindow);
+    }
 
-            await _context.SaveChangesAsync();
-            return existingAppointment;
-        }
+    public async Task<bool> IsAvailableAsync(int doctorId, DateTime scheduledAtUtc)
+    {
+        var utc = DateTime.SpecifyKind(scheduledAtUtc, DateTimeKind.Utc);
 
-        public async Task<Appointment?> DeleteAppointmentAsync(string id)
-        {
-            var appointment = await _context.Appointments.FirstOrDefaultAsync(a => a.Id == id);
-            if (appointment == null)
-            {
-                return null;
-            }
-
-            _context.Appointments.Remove(appointment);
-            await _context.SaveChangesAsync();
-            return appointment;
-        }
+        return await _context.AvailabilitySlots.AnyAsync(s =>
+            s.DoctorId == doctorId &&
+            !s.IsBooked &&
+            s.StartTimeUtc <= utc &&
+            s.EndTimeUtc > utc);
     }
     }
+}

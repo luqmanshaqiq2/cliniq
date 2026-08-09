@@ -1,103 +1,82 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.EntityFrameworkCore;
+using Cliniq.Data;
 using Cliniq.MODELS;
-using Cliniq.REPOS.IREPOS;
-using Cliniq.DATA;
-using Cliniq.HELPER;
+using Cliniq.MODELS.ENUM;
+using Cliniq.REPOS.INTERFACES;
+using Microsoft.EntityFrameworkCore;
 
-namespace Cliniq.REPOS
+namespace Cliniq.REPOS;
+
+public class DoctorRepository : IDoctorRepository
 {
-    public class DoctorRepository : IDoctorRepository
+    private readonly CliniqDbContext _context;
+
+    public DoctorRepository(CliniqDbContext context)
     {
-        private readonly CliniqDbContext _context;
+        _context = context;
+    }
 
-        public DoctorRepository(CliniqDbContext context)
-        {
-            _context = context;
-        }
+    public async Task<List<Doctor>> GetAllAsync() =>
+        await _context.Doctors.AsNoTracking().ToListAsync();
 
-        public async Task<List<Doctor>> GetAllAsync(DoctorQueryObject query)
-        {
-            var doctors = _context.Doctors.AsQueryable();
+    public async Task<Doctor?> GetByIdAsync(int id) =>
+        await _context.Doctors.FirstOrDefaultAsync(d => d.Id == id);
 
-            if (!string.IsNullOrWhiteSpace(query.FirstName))
-                doctors = doctors.Where(d => d.FirstName.Contains(query.FirstName));
+    public async Task<Doctor> CreateAsync(Doctor doctor)
+    {
+        _context.Doctors.Add(doctor);
+        await _context.SaveChangesAsync();
+        return doctor;
+    }
 
-            if (!string.IsNullOrWhiteSpace(query.LastName))
-                doctors = doctors.Where(d => d.LastName.Contains(query.LastName));
+    public async Task<Doctor?> UpdateAsync(int id, Doctor doctor)
+    {
+        var existing = await _context.Doctors.FirstOrDefaultAsync(d => d.Id == id);
+        if (existing is null) return null;
 
-            if (!string.IsNullOrWhiteSpace(query.Specialization))
-                doctors = doctors.Where(d => d.Specialization == query.Specialization);
+        existing.FullName = doctor.FullName;
+        existing.Specialization = doctor.Specialization;
+        existing.ContactNumber = doctor.ContactNumber;
+        existing.Email = doctor.Email;
 
-             if (!string.IsNullOrWhiteSpace(query.SortBy))
-                {
-                    doctors = query.SortBy.ToLower() switch
-                    {
-                        "firstname" => query.IsDescending
-                            ? doctors.OrderByDescending(d => d.FirstName)
-                            : doctors.OrderBy(d => d.FirstName),
-                        "lastname" => query.IsDescending
-                            ? doctors.OrderByDescending(d => d.LastName)
-                            : doctors.OrderBy(d => d.LastName),
-                        "specialization" => query.IsDescending
-                            ? doctors.OrderByDescending(d => d.Specialization)
-                            : doctors.OrderBy(d => d.Specialization),
-                        _ => doctors
-                    };
-                }
+        await _context.SaveChangesAsync();
+        return existing;
+    }
 
-            return await doctors.ToListAsync();
-        }
+    public async Task<bool> DeleteAsync(int id)
+    {
+        var existing = await _context.Doctors.FirstOrDefaultAsync(d => d.Id == id);
+        if (existing is null) return false;
 
-        public async Task<Doctor?> GetByIdAsync(string id)
-        {
-            return await _context.Doctors.FirstOrDefaultAsync(d => d.Id == id);
-        }
+        _context.Doctors.Remove(existing);
+        await _context.SaveChangesAsync();
+        return true;
+    }
 
-        public async Task<Doctor?> GetByEmailAsync(string email)
-        {
-            return await _context.Doctors.FirstOrDefaultAsync(d => d.Email == email);
-        }
+    public Task<bool> ExistsAsync(int id) =>
+        _context.Doctors.AnyAsync(d => d.Id == id);
 
-        public async Task<Doctor?> GetByPhoneNumberAsync(string phoneNumber)
-        {
-            return await _context.Doctors.FirstOrDefaultAsync(d => d.Phone == phoneNumber);
-        }
+    public async Task<bool> LinkUserAsync(int doctorId, int userId)
+    {
+        var doctorExists = await _context.Doctors.AnyAsync(d => d.Id == doctorId);
+        if (!doctorExists) return false;
 
-        public async Task<Doctor> CreateDoctorAsync(Doctor doctorModel)
-        {
-            await _context.Doctors.AddAsync(doctorModel);
-            await _context.SaveChangesAsync();
-            return doctorModel;
-        }
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId)
+            ?? throw new ArgumentException("User was not found.");
 
-        public async Task<Doctor?> UpdateDoctorAsync(string id, Doctor doctorModel)
-        {
-            var existingDoctor = await _context.Doctors.FirstOrDefaultAsync(d => d.Id == id);
-            if (existingDoctor == null) return null;
+        if (user.Role != UserRole.Doctor)
+            throw new ArgumentException("Only a user with the Doctor role can be linked to a doctor profile.");
 
-            existingDoctor.FirstName = doctorModel.FirstName;
-            existingDoctor.LastName = doctorModel.LastName;
-            existingDoctor.Specialization = doctorModel.Specialization;
-            existingDoctor.Phone = doctorModel.Phone;
-            existingDoctor.Email = doctorModel.Email;
-            existingDoctor.ConsultationFee = doctorModel.ConsultationFee;
+        var assignedElsewhere = await _context.Users.AnyAsync(u =>
+            u.Id != userId && u.DoctorId == doctorId);
 
-            await _context.SaveChangesAsync();
-            return existingDoctor;
-        }
+        if (assignedElsewhere)
+            throw new InvalidOperationException("This doctor profile is already linked to another user.");
 
-        public async Task<Doctor?> DeleteDoctorAsync(string id)
-        {
-            var existingDoctor = await _context.Doctors.FirstOrDefaultAsync(d => d.Id == id);
-            if (existingDoctor == null) return null;
+        if (user.DoctorId.HasValue && user.DoctorId != doctorId)
+            throw new InvalidOperationException("This user is already linked to another doctor profile.");
 
-            _context.Doctors.Remove(existingDoctor);
-            await _context.SaveChangesAsync();
-            return existingDoctor;
-        }
+        user.DoctorId = doctorId;
+        await _context.SaveChangesAsync();
+        return true;
     }
 }
