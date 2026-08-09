@@ -1,6 +1,7 @@
 # Cliniq API
 
 Cliniq is an ASP.NET Core Web API for managing patients, doctors, appointments, clinical records, invoices, and payments.
+REFER THE PDF (IT LOOKS COOL & NICHE FOR ME TO LARP ABOUT THE PROJECT)
 
 ## Requirements
 
