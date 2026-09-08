@@ -7,13 +7,15 @@ REFER THE PDF (IT LOOKS COOL & NICHE FOR ME TO LARP ABOUT THE PROJECT)
 ## Requirements
 
 - .NET 10 SDK
-- SQL Server or SQL Server Express
+- PostgreSQL
 
 ## Run locally
 
-1. Update the `DefaultConnection` value in `appsettings.json` for your SQL Server instance.
-2. Apply the Entity Framework migrations.
-3. Start the API.
+1. Configure `ConnectionStrings:DefaultConnection` (or `ConnectionStrings__DefaultConnection`) for your PostgreSQL instance.
+2. Configure `Jwt__Key` with a development-only signing key of at least 32 characters. It is intentionally not stored in this repository.
+3. Optionally configure `FrontendUrl` if a browser frontend will call the API.
+4. Apply the Entity Framework migrations.
+5. Start the API.
 
 ```powershell
 dotnet ef database update
@@ -26,7 +28,7 @@ In the Development environment, Swagger is available at `/swagger`.
 
 This API uses Redis as a distributed cache for selected read operations. Doctor and patient read endpoints cache the fetched DTO results in Redis, which reduces repeated database queries for frequently requested records.
 
-- Redis is configured via `Redis:Configuration` and `Redis:InstanceName` in `appsettings.json`.
+- Redis is configured via `Redis:Configuration` and `Redis:InstanceName` in configuration or environment variables.
 - The API registers `AddStackExchangeRedisCache(...)` in `Program.cs`.
 - Cached doctor records are invalidated when doctors are created, updated, or deleted.
 - Cached patient records are invalidated when a patient is updated or deleted.
@@ -35,18 +37,33 @@ If Redis is not available, the application will still function but without distr
 
 ## Production deployment
 
-## Production deployment
-
-- Use `appsettings.Production.json` or environment variables to override the production connection string and JWT secret.
-- Do not leave `Jwt:Key` or production DB credentials in source control.
-- Run EF migrations before starting the API in production, for example:
+- Set `ConnectionStrings__DefaultConnection` and `Jwt__Key` in the hosting environment.
+- Set `FrontendUrl` only if a browser frontend will call the API.
+- Optionally set `Jwt__Issuer` and `Jwt__Audience` if the production token settings differ from the defaults.
+- Set `Redis__Configuration` only when Redis caching is needed in production.
+- Do not leave JWT keys or database credentials in source control.
+- Run EF migrations deliberately before starting the API:
 
 ```powershell
-dotnet ef database update --environment Production
+dotnet ef database update --project Cliniq.csproj --startup-project Cliniq.csproj -- --environment Production
 ```
 
-- Use a proper secret store or environment variables for `Jwt:Key`, `ConnectionStrings:DefaultConnection`, and other sensitive configuration.
-- Confirm that HTTPS and HSTS are enabled in production.
+- Render can start the published application with the port it provides:
+
+```text
+dotnet out/Cliniq.dll --urls http://0.0.0.0:$PORT
+```
+
+Use these Render commands:
+
+```text
+Build Command: dotnet publish -c Release -o out
+Start Command: dotnet out/Cliniq.dll --urls http://0.0.0.0:$PORT
+```
+
+- Swagger remains enabled only in the Development environment.
+
+The current checkout contains an EF Core model snapshot but no migration class. The project also references source namespaces whose files are absent from this checkout, so `dotnet ef migrations add InitialPostgres` must be run after those application files are restored and the project builds successfully. Do not apply the old SQL Server snapshot to PostgreSQL.
 
 ## Authentication
 

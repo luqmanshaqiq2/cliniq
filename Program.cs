@@ -12,6 +12,7 @@ using FluentValidation;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
@@ -20,6 +21,13 @@ using Serilog.Events;
 
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 builder.Host.UseSerilog((context, services, configuration) => configuration
     .ReadFrom.Configuration(context.Configuration)
@@ -31,7 +39,7 @@ MapsterConfig.Register();
 
 // --- Database ---
 builder.Services.AddDbContext<CliniqDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // --- Redis distributed cache ---
 builder.Services.AddStackExchangeRedisCache(options =>
@@ -43,11 +51,16 @@ builder.Services.AddStackExchangeRedisCache(options =>
 // --- CORS ---
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll", policy =>
+    options.AddPolicy("Frontend", policy =>
     {
+        var frontendUrl = builder.Configuration["FrontendUrl"];
+        if (!string.IsNullOrWhiteSpace(frontendUrl))
+        {
+            policy.WithOrigins(frontendUrl.TrimEnd('/'));
+        }
+
         policy.AllowAnyHeader();
         policy.AllowAnyMethod();
-        policy.AllowAnyOrigin();
     });
 });
 
@@ -74,7 +87,12 @@ builder.Services.AddControllers();
 builder.Services.AddHealthChecks();
 
 // --- JWT Auth ---
-var jwtKey = builder.Configuration["Jwt:Key"]!;
+var jwtKey = builder.Configuration["Jwt:Key"];
+if (string.IsNullOrWhiteSpace(jwtKey))
+{
+    throw new InvalidOperationException("Jwt:Key must be configured.");
+}
+
 builder.Services.AddAuthentication(options =>
     {
         options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -159,8 +177,9 @@ else
 }
 
 app.UseSerilogRequestLogging();
+app.UseForwardedHeaders();
 app.UseHttpsRedirection();
-app.UseCors("AllowAll");
+app.UseCors("Frontend");
 
 app.UseMiddleware<GlobalExceptionMiddleware>();
 
