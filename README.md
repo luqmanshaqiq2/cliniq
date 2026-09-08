@@ -45,8 +45,11 @@ If Redis is not available, the application will still function but without distr
 - Run EF migrations deliberately before starting the API:
 
 ```powershell
+$env:ConnectionStrings__DefaultConnection="<Render PostgreSQL connection string>"
 dotnet ef database update --project Cliniq.csproj --startup-project Cliniq.csproj -- --environment Production
 ```
+
+The EF design-time factory reads `ConnectionStrings__DefaultConnection`. If it is not set, it falls back to a local development placeholder and cannot reach the Render database.
 
 - Render can start the published application with the port it provides:
 
