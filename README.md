@@ -7,15 +7,13 @@ REFER THE PDF (IT LOOKS COOL & NICHE FOR ME TO LARP ABOUT THE PROJECT)
 ## Requirements
 
 - .NET 10 SDK
-- PostgreSQL
+- SQL Server or SQL Server Express
 
 ## Run locally
 
-1. Configure `ConnectionStrings:DefaultConnection` (or `ConnectionStrings__DefaultConnection`) for your PostgreSQL instance.
-2. Configure `Jwt__Key` with a development-only signing key of at least 32 characters. It is intentionally not stored in this repository.
-3. Optionally configure `FrontendUrl` if a browser frontend will call the API.
-4. Apply the Entity Framework migrations.
-5. Start the API.
+1. Configure `ConnectionStrings:DefaultConnection` (or `ConnectionStrings__DefaultConnection`) for your SQL Server instance.
+2. Apply the Entity Framework migrations.
+3. Start the API.
 
 ```powershell
 dotnet ef database update
@@ -35,38 +33,18 @@ This API uses Redis as a distributed cache for selected read operations. Doctor 
 
 If Redis is not available, the application will still function but without distributed caching benefits.
 
-## Production deployment
+## Production configuration
 
 - Set `ConnectionStrings__DefaultConnection` and `Jwt__Key` in the hosting environment.
-- Set `FrontendUrl` only if a browser frontend will call the API.
-- Optionally set `Jwt__Issuer` and `Jwt__Audience` if the production token settings differ from the defaults.
-- Set `Redis__Configuration` only when Redis caching is needed in production.
+- Set `Redis__Configuration` only when Redis caching is needed.
 - Do not leave JWT keys or database credentials in source control.
 - Run EF migrations deliberately before starting the API:
 
 ```powershell
-$env:ConnectionStrings__DefaultConnection="<Render PostgreSQL connection string>"
 dotnet ef database update --project Cliniq.csproj --startup-project Cliniq.csproj -- --environment Production
 ```
 
-The EF design-time factory reads `ConnectionStrings__DefaultConnection`. If it is not set, it falls back to a local development placeholder and cannot reach the Render database.
-
-- Render can start the published application with the port it provides:
-
-```text
-dotnet out/Cliniq.dll --urls http://0.0.0.0:$PORT
-```
-
-Use these Render commands:
-
-```text
-Build Command: dotnet publish -c Release -o out
-Start Command: dotnet out/Cliniq.dll --urls http://0.0.0.0:$PORT
-```
-
 - Swagger remains enabled only in the Development environment.
-
-The repository includes the `InitialPostgres` EF Core migration and its PostgreSQL model snapshot. Apply it deliberately against the Render database before starting the API. The design-time DbContext factory uses only a local placeholder connection for migration generation; it does not contain production credentials.
 
 ## Authentication
 

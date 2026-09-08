@@ -3,7 +3,6 @@ using System.Threading.RateLimiting;
 using Cliniq.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
@@ -13,13 +12,6 @@ using Serilog.Events;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.Configure<ForwardedHeadersOptions>(options =>
-{
-    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    options.KnownIPNetworks.Clear();
-    options.KnownProxies.Clear();
-});
-
 builder.Host.UseSerilog((context, services, configuration) => configuration
     .ReadFrom.Configuration(context.Configuration)
     .ReadFrom.Services(services)
@@ -28,7 +20,7 @@ builder.Host.UseSerilog((context, services, configuration) => configuration
 
 // --- Database ---
 builder.Services.AddDbContext<CliniqDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // --- Redis distributed cache ---
 builder.Services.AddStackExchangeRedisCache(options =>
@@ -40,16 +32,11 @@ builder.Services.AddStackExchangeRedisCache(options =>
 // --- CORS ---
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("Frontend", policy =>
+    options.AddPolicy("AllowAll", policy =>
     {
-        var frontendUrl = builder.Configuration["FrontendUrl"];
-        if (!string.IsNullOrWhiteSpace(frontendUrl))
-        {
-            policy.WithOrigins(frontendUrl.TrimEnd('/'));
-        }
-
         policy.AllowAnyHeader();
         policy.AllowAnyMethod();
+        policy.AllowAnyOrigin();
     });
 });
 
@@ -150,9 +137,8 @@ else
 }
 
 app.UseSerilogRequestLogging();
-app.UseForwardedHeaders();
 app.UseHttpsRedirection();
-app.UseCors("Frontend");
+app.UseCors("AllowAll");
 
 app.UseRateLimiter();
 

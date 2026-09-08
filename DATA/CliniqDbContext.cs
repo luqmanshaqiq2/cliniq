@@ -25,6 +25,14 @@ public class CliniqDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
+        modelBuilder.Entity<Invoice>()
+            .Property(invoice => invoice.Amount)
+            .HasPrecision(18, 2);
+
+        modelBuilder.Entity<Payment>()
+            .Property(payment => payment.AmountPaid)
+            .HasPrecision(18, 2);
+
         // ApplicationUser -> Patient (optional 1:1)
         modelBuilder.Entity<ApplicationUser>()
             .HasOne(u => u.Patient)
