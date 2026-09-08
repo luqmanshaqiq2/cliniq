@@ -1,15 +1,6 @@
 using System.Text;
 using System.Threading.RateLimiting;
 using Cliniq.Data;
-using Cliniq.MIDDLEWARE;
-using Cliniq.REPOS;
-using Cliniq.REPOS.INTERFACES;
-using Cliniq.Services;
-using Cliniq.SERVICES;
-using Cliniq.Validators;
-using Cliniq.HELPER;
-using FluentValidation;
-using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -25,7 +16,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    options.KnownNetworks.Clear();
+    options.KnownIPNetworks.Clear();
     options.KnownProxies.Clear();
 });
 
@@ -34,8 +25,6 @@ builder.Host.UseSerilog((context, services, configuration) => configuration
     .ReadFrom.Services(services)
     .Enrich.FromLogContext()
     .WriteTo.Console());
-
-MapsterConfig.Register();
 
 // --- Database ---
 builder.Services.AddDbContext<CliniqDbContext>(options =>
@@ -63,22 +52,6 @@ builder.Services.AddCors(options =>
         policy.AllowAnyMethod();
     });
 });
-
-// --- FluentValidation ---
-builder.Services.AddFluentValidationAutoValidation();
-builder.Services.AddValidatorsFromAssemblyContaining<CreatePatientValidator>();
-
-// --- Repositories ---
-builder.Services.AddScoped<IPatientRepository, PatientRepository>();
-builder.Services.AddScoped<IDoctorRepository, DoctorRepository>();
-builder.Services.AddScoped<IAppointmentRepository, AppointmentRepository>();
-
-// --- Services ---
-builder.Services.AddScoped<IPatientService, PatientService>();
-builder.Services.AddScoped<IDoctorService, DoctorService>();
-builder.Services.AddScoped<IAppointmentService, AppointmentService>();
-builder.Services.AddScoped<IBillingService, BillingService>();
-builder.Services.AddScoped<ITokenService, TokenService>();
 
 // --- Controllers ---
 builder.Services.AddControllers();
@@ -180,8 +153,6 @@ app.UseSerilogRequestLogging();
 app.UseForwardedHeaders();
 app.UseHttpsRedirection();
 app.UseCors("Frontend");
-
-app.UseMiddleware<GlobalExceptionMiddleware>();
 
 app.UseRateLimiter();
 

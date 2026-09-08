@@ -63,7 +63,7 @@ Start Command: dotnet out/Cliniq.dll --urls http://0.0.0.0:$PORT
 
 - Swagger remains enabled only in the Development environment.
 
-The current checkout contains an EF Core model snapshot but no migration class. The project also references source namespaces whose files are absent from this checkout, so `dotnet ef migrations add InitialPostgres` must be run after those application files are restored and the project builds successfully. Do not apply the old SQL Server snapshot to PostgreSQL.
+The repository includes the `InitialPostgres` EF Core migration and its PostgreSQL model snapshot. Apply it deliberately against the Render database before starting the API. The design-time DbContext factory uses only a local placeholder connection for migration generation; it does not contain production credentials.
 
 ## Authentication
 
